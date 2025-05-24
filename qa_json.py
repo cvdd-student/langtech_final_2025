@@ -5,6 +5,46 @@ import spacy
 import requests
 import time
 
+import qa_question_types as qu
+
+
+def get_property_ids(str_question, nlp):
+    url = 'https://www.wikidata.org/w/api.php'
+    parse = nlp(str_question)
+    property_id = ""
+    
+    qword_index = -1
+    enum_index = 0
+    
+    for chunk in parse:
+        if chunk.pos_ == "ADV":
+            qword_index = enum_index
+        elif chunk.pos_ == "NUM" and qword_index == -1:
+            qword_index = enum_index
+        elif "wie" in chunk.lemma_ or "wat" in chunk.lemma_:
+            qword_index = enum_index
+        enum_index += 1
+    
+    if qword_index == -1:
+        return None
+    
+    match parse[qword_index].lemma_:
+        case "waar":
+            property_id = qu.question_waar(parse, url)
+        case "hoeveel":
+            property_id = qu.question_hoeveel(parse, url)
+            extra_mode = 1
+        case "wie":
+            property_id = qu.question_wie_wat(parse, url)
+        case "wat":
+            property_id = qu.question_wie_wat(parse, url)
+    
+    if property_id == "":
+        return None
+    
+    return property_id
+
+
 def get_named_entity(str_question, nlp):
     url = 'https://www.wikidata.org/w/api.php'
     parse = nlp(str_question)
@@ -25,7 +65,7 @@ def get_named_entity(str_question, nlp):
     try:
         person_id = json['search'][0]['id']
     except KeyError:
-        print("KEYERROR:", str_question)
+        print("KEYERROR (no named entity):", str_question)
         person_id = None
     except IndexError:
         print("ERROR: NO ID FOUND WHILE THERE WAS A NAMED ENTITY:", parsed_entity)
@@ -35,9 +75,11 @@ def get_named_entity(str_question, nlp):
 
 
 def determine_answer(qa_question, nlp):
-    # print(qa_question)
+    print(qa_question)
     person_id = get_named_entity(qa_question, nlp)
-    # print(person_id)
+    list_property_ids = get_property_ids(qa_question, nlp)
+    print("IDS", person_id, list_property_ids)
+    print()
 
 
 def main():
