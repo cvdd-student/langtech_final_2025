@@ -42,6 +42,9 @@ def get_property_ids(str_question, nlp):
     if property_id == "":
         return None
     
+    if property_id == []:
+        return None
+    
     return property_id
 
 
@@ -74,11 +77,42 @@ def get_named_entity(str_question, nlp):
     return person_id
 
 
+def query_answer(person_id, list_property_ids):
+    url = 'https://query.wikidata.org/sparql'
+    flag_result_found = False
+    iter_properties = 0
+    
+    while flag_result_found == False:
+        if iter_properties == len(list_property_ids):
+            flag_result_found = True
+            print("ERROR: No result found")
+            print("ENTITY FOUND: " + person_id)
+            print("PROPERTY IDS ATTEMPTED: " + str(list_property_ids))
+            return None
+
+        property_id = list_property_ids[iter_properties]
+        query = 'SELECT ?answerLabel WHERE { wd:' + person_id + ' wdt:' + property_id + ' ?answer SERVICE wikibase:label { bd:serviceParam wikibase:language "[AUTO_LANGUAGE],mul,en". }}'
+        results = requests.get(url, params={'query': query, 'format': 'json'}).json()
+        iter_properties += 1
+        if results['results']['bindings'] != []:
+            flag_result_found = True
+        
+        list_answers = []
+        for answer in results['results']['bindings']:
+            list_answers.append(answer['answerLabel']['value'])
+        
+        return list_answers
+
+
 def determine_answer(qa_question, nlp):
     print(qa_question)
     person_id = get_named_entity(qa_question, nlp)
     list_property_ids = get_property_ids(qa_question, nlp)
-    print("IDS", person_id, list_property_ids)
+    print("IDS:", person_id, list_property_ids)
+    if person_id != None and list_property_ids != None:
+        list_answers = query_answer(person_id, list_property_ids)
+        for item in list_answers:
+            print(item)
     print()
 
 
