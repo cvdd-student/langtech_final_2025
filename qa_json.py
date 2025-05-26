@@ -109,11 +109,16 @@ def determine_answer(qa_question, nlp):
     person_id = get_named_entity(qa_question, nlp)
     list_property_ids = get_property_ids(qa_question, nlp)
     print("IDS:", person_id, list_property_ids)
+    
+    list_answers = None
+    
     if person_id != None and list_property_ids != None:
         list_answers = query_answer(person_id, list_property_ids)
         for item in list_answers:
             print(item)
     print()
+
+    return list_answers
 
 
 def main():
@@ -125,12 +130,22 @@ def main():
     filepath = "data/all-questions.json"
     with open(filepath, "r") as file:
         data = json.load(file)
-    
+
+    list_out = []
+
     # Loop over all the questions in the file
     for item in data:
+        item_export = item
         qa_question = item["string"]
         qa_true = item["answer"][0]["string"]
-        determine_answer(qa_question, nlp)
+        list_answers = determine_answer(qa_question, nlp)
+        item_export["query_result"] = list_answers
+        list_out.append(item_export)
+
+    # Export file
+    json_out = json.dumps(list_out)
+    with open("output.json", "w") as file:
+        file.write(json_out)
 
 
 if __name__ == "__main__":
