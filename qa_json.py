@@ -132,18 +132,28 @@ def main():
         data = json.load(file)
 
     list_out = []
+    iter_id = 1
 
     # Loop over all the questions in the file
     for item in data:
-        item_export = item
+        item_export = dict()
         qa_question = item["string"]
         qa_true = item["answer"][0]["string"]
         list_answers = determine_answer(qa_question, nlp)
-        item_export["query_result"] = list_answers
+        
+        item_export["id"] = iter_id
+        item_export["question"] = item["string"]
+        if list_answers != [] and list_answers != None:
+            item_export["answer"] = ",".join(list_answers)
+        else:
+            item_export["answer"] = None
+        item_export["score"] = 0
+        
         list_out.append(item_export)
+        iter_id += 1
 
     # Export file
-    json_out = json.dumps(list_out)
+    json_out = json.dumps(list_out, indent=4)
     with open("output.json", "w") as file:
         file.write(json_out)
 
