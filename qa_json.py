@@ -83,6 +83,7 @@ def query_answer(person_id, list_property_ids):
     iter_properties = 0
     
     while flag_result_found == False:
+        time.sleep(2)
         if iter_properties == len(list_property_ids):
             flag_result_found = True
             print("ERROR: No result found")
@@ -97,11 +98,14 @@ def query_answer(person_id, list_property_ids):
         if results['results']['bindings'] != []:
             flag_result_found = True
         
-        list_answers = []
-        for answer in results['results']['bindings']:
-            list_answers.append(answer['answerLabel']['value'])
+    list_answers = []
+    for answer in results['results']['bindings']:
+        list_answers.append(answer['answerLabel']['value'])
+    
+    if list_answers == []:
+        return None
         
-        return list_answers
+    return list_answers
 
 
 def determine_answer(qa_question, nlp):
@@ -114,9 +118,13 @@ def determine_answer(qa_question, nlp):
     
     if person_id != None and list_property_ids != None:
         list_answers = query_answer(person_id, list_property_ids)
-        for item in list_answers:
-            print(item)
+        if list_answers != None:
+            for item in list_answers:
+                print(item)
     print()
+    
+    if "hoeveel" in qa_question.lower() and type(list_answers) == list and len(list_answers) > 1:
+        list_answers = [str(len(list_answers))]
 
     return list_answers
 
