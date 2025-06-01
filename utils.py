@@ -3,6 +3,7 @@ QUESTION_TYPE = {
     "wie": "WH_",
     "hoe": "HOW",
     "hoeveel": "HOW",
+    "welke": "WHICH",
 }
 
 YESNO_STARTERS = {
@@ -60,8 +61,16 @@ def identity_question(token):
 
 def question_type(question, first):
     """Return the type of question based on the first non-whitespace character"""
+
+    for word in question:
+        if str(word) in 'welk, welke, waar':
+            qtype = "WHICH"
+            return qtype
+
     if first in YESNO_STARTERS:
         qtype = "YESNO"
+    elif first == 'welk':
+        qtype = "WHICH"
     else:
         qtype = QUESTION_TYPE.get(first, "OTHER")
     return qtype

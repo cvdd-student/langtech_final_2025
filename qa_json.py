@@ -47,7 +47,7 @@ def main():
 
         if entity_id_matches and property_id_matches: # no point runing queries when no entitiy or property id's are found
             # branching logic for queries
-            if q_info['qtype'] == 'WH_':
+            if q_info['qtype'] == 'WH_' or q_info['qtype'] == 'WHICH':
                 list_answers = qy.process_questions(q_info['qtype'], entity_id_matches, property_id_matches, qy.query_constructor_wh_how, include_values=False)
             elif q_info['qtype'] == 'HOW':
                 list_answers = qy.process_questions(q_info['qtype'], entity_id_matches, property_id_matches, qy.query_constructor_wh_how, include_values=False)

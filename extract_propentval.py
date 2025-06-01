@@ -158,6 +158,54 @@ def extract_yesno_value(doc, prop_tok):
             return " ".join(full_phrase), value_type
     return "", value_type
 
+def which_extractor(doc):
+    ent_list = []
+    prop_list = []
+
+    # turns entities object into a mutable list of strings
+    for ent in doc.ents:
+        ent_list.append(str(ent))
+
+    # removes adjectives from entities list
+    for word in doc:
+        if word.pos_ in 'ADJ' and str(word) in str(doc.ents):
+            ent_list.remove(str(word))
+
+    # sets sentence object as property
+    for word in doc:
+        if word.dep_ == "obj":
+            prop_list.append(str(word))
+
+    # sets 'nsubj' as property if no sentence object was found
+    if prop_list == []:
+        for word in doc:
+            if "nsubj" in word.dep_:
+                prop_list.append(str(word))
+
+    # removes year and the word 'Nederland' from entity list
+    # adds year to val_list
+    for word in ent_list:
+        if word.isnumeric():
+            ent_list.remove(word)
+            year_list.append(word)
+        elif word == 'Nederland':
+            ent_list.remove(word)
+
+    for word in doc:
+        if str(word) == 'geboren':
+            prop_list[0] = 'geboorteplaats'
+        elif str(word) in 'overleden, gestorven, vermoord':
+            prop_list[0] = 'sterfdatum'
+
+    if prop_list == [] and ent_list == []:
+        return "", ""
+    elif prop_list == [] and ent_list != []:
+        return "", ent_list[0]
+    elif prop_list != [] and ent_list == []:
+        return prop_list[0], ""
+    else:
+        return prop_list[0], ent_list[0]
+
 
 #  Wrapper function
 # ------------------------------------------------------------------
@@ -182,6 +230,11 @@ def parse_question(doc):
         value_text = ""
         if property_text == "lang":  # Wiki label API doesn't list correct property id
             property_text = "hoogte"
+
+    elif qtype == "WHICH":
+        property_text, entity_text = which_extractor(doc)
+        value_text = ""
+
     elif qtype == "YESNO":
         prop_tok = extract_yesno_property_token(doc)
         entity_text = extract_yesno_entity(doc).strip()
