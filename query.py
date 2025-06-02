@@ -125,4 +125,4 @@ def process_questions(qtype, entity_ids, property_ids, constructor_func, value_i
             if answer_found:
                 break
             
-    return answer
+    return answer_found
