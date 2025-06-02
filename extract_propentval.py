@@ -50,6 +50,89 @@ def extract_wh_entity(doc, prop_tok):
 
     return ut.name_span(ent_token)
 
+def _find_main_action_verb(doc):
+    """
+    Helper to find the main semantic verb in a WH-question,
+    excluding copular 'zijn' when it's not an auxiliary.
+    """
+    doc_root = ut.root(doc)
+    if not doc_root:
+        return None
+
+    # Root is a non-auxiliary, non-copular verb
+    if doc_root.pos_ == "VERB" and doc_root.dep_ != "aux":
+        if doc_root.lemma_ == "zijn" and doc_root.dep_ == "cop": # "Wat IS de naam..."
+            return None
+        return doc_root # e.g., "Wie PRESENTEERT X?"
+
+    # Root is an auxiliary (e.g., "heeft", "is" in passive)
+    # The main verb is a child of this auxiliary.
+    if doc_root.pos_ == "AUX" or \
+       (doc_root.pos_ == "VERB" and doc_root.lemma_ in ("hebben", "zijn", "worden")): # Treating some VERBs as aux
+        for child in doc_root.children:
+            # Main verb in a compound phrase (e.g., "gemaakt" in "heeft gemaakt")
+            if child.pos_ == "VERB" and child.dep_ not in ("aux", "aux:pass", "cop"):
+                return child
+    return None
+
+def extract_wh_verb_implied_info(doc):
+    """
+    For WH-questions like "Wie [verb] [Entity]?", extracts the entity (object of verb)
+    and infers property from the verb.
+    Returns: (property_text, entity_text) or (None, None)
+    """
+    main_verb = _find_main_action_verb(doc)
+    if not main_verb:
+        return None, None
+
+    obj_tok = None
+    # Find the direct object (obj) of the main_verb
+    for child in main_verb.children:
+        if child.dep_ == "obj":
+            obj_tok = child
+            break
+
+    # If object not found directly on main_verb, and main_verb was a child of an AUX root,
+    # the object might be a sibling of main_verb, attached to the AUX root.
+
+    if obj_tok:
+        entity_text = ""
+        if obj_tok.pos_ == "PROPN":
+            entity_text = ut.name_span(obj_tok)
+        elif obj_tok.pos_ == "NOUN":
+            appos_propn = None
+            for child in obj_tok.children:
+                if child.dep_ == "appos" and child.pos_ == "PROPN":
+                    appos_propn = child
+                    break
+            if appos_propn:
+                entity_text = ut.name_span(appos_propn)
+            else:
+                entity_text = ut.noun_chunk_of(obj_tok)
+
+        if not entity_text: # Ensure we have a meaningful entity
+            return None, None
+
+        verb_lemma = main_verb.lemma_.lower()
+        verb_to_property_map = {
+            "presenteren": "presentator van",
+            "bedenken": "bedenker van",
+            "maken": "maker van",
+            "spelen": "speler in",
+            "vermoorden": "moordenaar van",
+            "zitten": "lid van",
+            "winnen": "winnaar van",
+            "schilderen": "schilder van",
+            "schrijven": "schrijver van",
+            "ontdekken": "ontdekker van"
+        }
+        if verb_lemma in verb_to_property_map:
+            property_text = verb_to_property_map[verb_lemma]
+            return property_text.strip(), entity_text.strip()
+
+    return None, None
+
+
 
 #  Hoe / Hoeveel helpers
 # ------------------------------------------------------------------
@@ -187,15 +270,14 @@ def which_extractor(doc):
     for word in ent_list:
         if word.isnumeric():
             ent_list.remove(word)
-            year_list.append(word)
         elif word == 'Nederland':
             ent_list.remove(word)
 
     for word in doc:
-        if str(word) == 'geboren':
-            prop_list[0] = 'geboorteplaats'
-        elif str(word) in 'overleden, gestorven, vermoord':
-            prop_list[0] = 'sterfdatum'
+        if word.text == 'geboren':
+            prop_list.insert(0,'geboorteplaats')
+        elif word.text in ('overleden', 'gestorven', 'vermoord'):
+            prop_list.insert(0,'sterfdatum')
 
     if prop_list == [] and ent_list == []:
         return "", ""
@@ -216,50 +298,72 @@ def parse_question(doc):
 
     qtype = ut.question_type(doc, first)
     #print(qtype)
+    
+    # Initialize texts to ensure they are always strings
+    property_text = ""
+    entity_text = ""
+    value_text = ""
 
     if qtype == "WH_":
-        prop_tok = extract_wh_property_token(doc)
-        entity_text = extract_wh_entity(doc, prop_tok).strip()
-        property_text = ut.noun_chunk_of(prop_tok).strip()
-        value_text = ""
+        # Try to extract property and entity using verb-implied logic first
+        inferred_prop, inferred_ent = extract_wh_verb_implied_info(doc)
+
+        if inferred_prop and inferred_ent:
+            property_text = inferred_prop
+            entity_text = inferred_ent
+        else:
+            prop_tok = extract_wh_property_token(doc)
+            if prop_tok: 
+                # If prop_tok is a verb, noun_chunk_of might be empty or verb text.
+                # We only want noun chunks here.
+                if prop_tok.pos_ == "NOUN" or prop_tok.pos_ == "PROPN":
+                     property_text = ut.noun_chunk_of(prop_tok).strip()
+                else: # prop_tok was a verb or something else not a noun, don't use for property_text
+                     property_text = ""
+                entity_text = extract_wh_entity(doc, prop_tok).strip() # prop_tok might be a verb here
+            else: 
+                # prop_tok is None, no noun property found by extract_wh_property_token
+                # extract_wh_entity can try to find an entity even with prop_tok as None
+                entity_text = extract_wh_entity(doc, None).strip()
 
     elif qtype == "HOW":
         prop_tok = extract_how_property_token(doc)
-        entity_text = extract_how_entity(doc, prop_tok).strip()
-        property_text = ut.noun_chunk_of(prop_tok).strip()
-        value_text = ""
-        if property_text == "lang":  # Wiki label API doesn't list correct property id
-            property_text = "hoogte"
+        if prop_tok:
+            entity_text = extract_how_entity(doc, prop_tok).strip()
+            property_text = ut.noun_chunk_of(prop_tok).strip()
+            value_text = ""
+            if property_text == "lang":  # Wiki label API doesn't list correct property id
+                property_text = "hoogte"
 
     elif qtype == "WHICH":
         property_text, entity_text = which_extractor(doc)
-        value_text = ""
 
     elif qtype == "YESNO":
         prop_tok = extract_yesno_property_token(doc)
-        entity_text = extract_yesno_entity(doc).strip()
-        property_text = ut.noun_chunk_of(prop_tok).strip()
-        value_text, value_type = extract_yesno_value(doc, prop_tok)
-        value_text = value_text.strip()
-
-        # To handle a specific type of yes/no question: identity questions
-        if ut.identity_question(prop_tok) and first == "zijn":
-            value_text = property_text
-            #  Converting some common mismatches between api and actual text
-            if value_text == "vrouw":
-                value_text = "vrouwelijk"
-            if prop_tok.text in ut.GENDER_NOUNS:
-                property_text = "geslacht"
-            elif prop_tok.text.startswith("vege"):
-                property_text = "lifestyle"
-            elif property_text == "lang":
-                property_text = "hoogte"
-            elif property_text == "echte naam":
-                property_text == "geboortenaam"
-            else:
-                property_text = "beroep"
+        if prop_tok:
+            entity_text = extract_yesno_entity(doc).strip()
+            property_text = ut.noun_chunk_of(prop_tok).strip()
+            extracted_value, extracted_value_type = extract_yesno_value(doc, prop_tok)
+            value_text = extracted_value.strip()
+            value_type = extracted_value_type
+            # To handle a specific type of yes/no question: identity questions
+            if ut.identity_question(prop_tok) and first == "zijn":
+                value_text = property_text
+                #  Converting some common mismatches between api and actual text
+                if value_text == "vrouw":
+                    value_text = "vrouwelijk"
+                if prop_tok.text in ut.GENDER_NOUNS:
+                    property_text = "geslacht"
+                elif prop_tok.text.startswith("vege"):
+                    property_text = "lifestyle"
+                elif property_text == "lang":
+                    property_text = "hoogte"
+                elif property_text in ("echte naam", "volledige naam"):
+                    property_text == "geboortenaam"
+                else:
+                    property_text = "beroep"
     else:
-        return {"qtype": qtype, "value_type": None, "property": None, "entity": None, "value": None}
+        property_text, entity_text = which_extractor(doc)
     if value_type is None:  # value_type is only set for yes/no questions so need to set it the default otherwise value_type is not defnined.
         value_type = "property"
     return {"qtype": qtype, "value_type": value_type, "property": property_text, "entity": entity_text, "value": value_text}
