@@ -10,7 +10,7 @@ def main():
     nlp = spacy.load("nl_core_news_lg")
     
     # Load JSON
-    filepath = "data/all-questions.json"
+    filepath = "data/test-questions.json"
     with open(filepath, "r", encoding='utf-8') as file:
         data = json.load(file)
         
@@ -20,7 +20,7 @@ def main():
     for item in data:
         iter_id += 1
         item_export = dict()
-        qa_question = item["string"]
+        qa_question = item["question"]
         print(qa_question)
         doc = nlp(qa_question)
         q_info = epev.parse_question(doc) # a dict with question type, value type, entity, property and value
@@ -72,7 +72,7 @@ def main():
         
         # Formatting logic for output json    
         item_export["id"] = iter_id
-        item_export["question"] = item["string"]
+        item_export["question"] = item["question"]
         if list_answers != [] and list_answers != None:
             item_export["answer"] = ",".join(list_answers)
         else:
